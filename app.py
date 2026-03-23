@@ -4,6 +4,7 @@ import requests
 import matplotlib.pyplot as plt
 import seaborn as sns
 import io
+import json
 from pathlib import Path
 
 from modules.load_and_preview import load_data, show_preview
@@ -71,7 +72,7 @@ if uploaded_file:
                         st.session_state.profile_results = None
         
         # ==================== Tab System ====================
-        tab1, tab2 = st.tabs(["📋 Manual Analysis", "📊 Automated Profile"])
+        tab1, tab2, tab_clean_manual, tab_clean_auto = st.tabs(["📋 Manual Analysis", "📊 Automated Profile", "🧹 Manual Cleaning", "🤖 Automated Cleaning"])
         
         # ==================== TAB 1: MANUAL ANALYSIS ====================
         with tab1:
@@ -156,8 +157,18 @@ if uploaded_file:
                     
                     if dupes > 0 and st.session_state.current_df is not None:
                         if st.checkbox("Show duplicate rows", key="show_dupes"):
-                            st.dataframe(st.session_state.current_df[st.session_state.current_df.duplicated(keep=False)]
-                                       .sort_values(by=list(st.session_state.current_df.columns)).head(50),
+                            df_current = st.session_state.current_df
+                            cols_to_check = []
+                            for col in df_current.columns:
+                                col_lower = str(col).lower()
+                                is_id_name = ('serial' in col_lower or 'index' in col_lower or col_lower == 'id' or col_lower.endswith('_id') or col_lower.startswith('id_') or col_lower.endswith('id'))
+                                if df_current[col].nunique(dropna=True) >= len(df_current) * 0.8 and is_id_name:
+                                    continue
+                                cols_to_check.append(col)
+                            if not cols_to_check: cols_to_check = df_current.columns
+                            
+                            st.dataframe(df_current[df_current.duplicated(subset=cols_to_check, keep=False)]
+                                       .sort_values(by=cols_to_check).head(50),
                                        use_container_width=True)
                     elif dupes == 0:
                         st.success("✅ No duplicates found!")
@@ -294,6 +305,95 @@ if uploaded_file:
                     st.dataframe(st.session_state.current_df.describe(), use_container_width=True)
             else:
                 st.info("📌 Click 'Automated Profiling (ydata)' to generate an automated profile report")
+                
+        # ==================== TAB 3: MANUAL CLEANING ====================
+        with tab_clean_manual:
+            st.header("🧹 Manual Data Cleaning")
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                mv_options = [
+                    "None", 
+                    "Drop missing values", 
+                    "Standard Imputation (Mean/Mode)", 
+                    "Robust Imputation (Median/Mode)", 
+                    "Advanced: KNN Imputation", 
+                    "Advanced: Iterative (Model-based)", 
+                    "Time Series: Interpolate", 
+                    "Time Series: Forward Fill"
+                ]
+                missing_val_opt = st.selectbox("Handling Missing Values", mv_options, key="mv_opt")
+                dup_opt = st.selectbox("Handling Duplicates", ["None", "Keep First", "Keep Last", "Drop All"], key="dup_opt")
+                outlier_opt = st.selectbox("Handling Outliers (Numeric)", ["None", "IQR", "Z-score"], key="outlier_opt")
+                
+            with col2:
+                inc_opt = st.selectbox("Handling Inconsistencies (Text)", ["None", "Standardize (Lower & Strip)"], key="inc_opt")
+                enc_opt = st.selectbox("Categorical Encoding", ["None", "Label Encoding", "One-Hot Encoding"], key="enc_opt")
+                fe_opt = st.selectbox("Feature Engineering", ["None", "Drop ID & Constant Columns"], key="fe_opt")
+
+            with col3:
+                imb_opt = st.selectbox("Handling Class Imbalance", ["None", "Undersample to balance", "Fill with synthetic data (SMOTE)"], key="imb_opt")
+                imb_target = "None"
+                if imb_opt != "None":
+                    imb_target = st.selectbox("Select Target Column for Imbalance", list(st.session_state.current_df.columns), key="imb_target")
+    
+            if st.button("🚀 Run Manual Cleaning"):
+                with st.spinner("Cleaning dataset..."):
+                    config = {
+                        "missing_values": missing_val_opt,
+                        "duplicates": dup_opt,
+                        "outliers": outlier_opt,
+                        "imbalance": imb_opt,
+                        "imbalance_target": imb_target,
+                        "inconsistencies": inc_opt,
+                        "encoding": enc_opt,
+                        "feature_engineering": fe_opt
+                    }
+                    uploaded_file.seek(0)
+                    files = {"file": (uploaded_file.name, uploaded_file.getvalue(), 
+                             "text/csv" if uploaded_file.name.endswith('.csv') else 
+                             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+                    data = {"config": json.dumps(config)}
+                    try:
+                        response = requests.post(f"{FASTAPI_URL}/clean/manual", files=files, data=data)
+                        response.raise_for_status()
+                        st.success("✅ Dataset Cleaned Successfully!")
+                        st.download_button(
+                            label="⬇️ Download Cleaned Dataset",
+                            data=response.content,
+                            file_name=f"cleaned_{uploaded_file.name}",
+                            mime="text/csv" if uploaded_file.name.endswith('.csv') else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+                    except Exception as e:
+                        st.error(f"❌ Failed to clean dataset: {e}")
+
+        # ==================== TAB 4: AUTOMATED CLEANING ====================
+        with tab_clean_auto:
+            st.header("🤖 Automated Data Cleaning (AutoML)")
+            st.info("This will automatically preprocess the dataset, handle missing values, encode features, and prepare it for training.")
+            
+            target_col_auto = st.selectbox("Select Target Column for AutoML (Required)", list(st.session_state.current_df.columns), key="target_col_auto")
+            
+            if st.button("🚀 Run Automated Cleaning"):
+                with st.spinner("Running AutoML cleaning pipeline (this may take a minute). Note: If PyCaret is not yet fully installed/ready, it uses heuristics..."):
+                    uploaded_file.seek(0)
+                    files = {"file": (uploaded_file.name, uploaded_file.getvalue(), 
+                             "text/csv" if uploaded_file.name.endswith('.csv') else 
+                             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+                    data = {"target_col": target_col_auto}
+                    try:
+                        response = requests.post(f"{FASTAPI_URL}/clean/auto", files=files, data=data)
+                        response.raise_for_status()
+                        st.success("✅ Dataset Auto-Cleaned Successfully!")
+                        st.download_button(
+                            label="⬇️ Download Auto-Cleaned Dataset",
+                            data=response.content,
+                            file_name=f"autocleaned_{uploaded_file.name}",
+                            mime="text/csv" if uploaded_file.name.endswith('.csv') else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+                    except Exception as e:
+                        st.error(f"❌ Failed to auto-clean dataset: {e}")
+
 else:
     # Clear session state if a new file isn't uploaded
     st.session_state.manual_results = None

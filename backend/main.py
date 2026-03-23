@@ -15,6 +15,8 @@ from modules.inconsistency import detect_inconsistencies
 from modules.imbalance import detect_imbalance
 from modules.correlation import correlation_analysis
 from modules.quality_score import compute_quality_score
+from modules.cleaning_manual import manual_clean_dataset
+from modules.cleaning_auto import auto_clean_dataset
 
 app = FastAPI(title="Dataset Analyser API")
 
@@ -253,3 +255,56 @@ async def download_profile_report_direct(file: UploadFile = File(...)):
         return FileResponse(report_path, media_type='text/html', filename=report_filename)
     except Exception as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
+
+# ==================== DATA CLEANING ENDPOINTS ====================
+
+@app.post("/clean/manual")
+async def clean_manual(file: UploadFile = File(...), config: str = Form(...)):
+    """
+    Apply manual cleaning based on the config JSON string.
+    """
+    contents = await file.read()
+    if file.filename.endswith('.csv'):
+        df = pd.read_csv(io.BytesIO(contents))
+    else:
+        df = pd.read_excel(io.BytesIO(contents))
+        
+    config_dict = json.loads(config)
+    cleaned_df = manual_clean_dataset(df, config_dict)
+    
+    cleaned_filename = f"cleaned_{file.filename}"
+    cleaned_path = Path(f"temp_{cleaned_filename}")
+    
+    if file.filename.endswith('.csv'):
+        cleaned_df.to_csv(cleaned_path, index=False)
+        media_type = 'text/csv'
+    else:
+        cleaned_df.to_excel(cleaned_path, index=False)
+        media_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    
+    return FileResponse(cleaned_path, media_type=media_type, filename=cleaned_filename)
+
+@app.post("/clean/auto")
+async def clean_auto(file: UploadFile = File(...), target_col: str = Form("None")):
+    """
+    Apply automated PyCaret cleaning.
+    """
+    contents = await file.read()
+    if file.filename.endswith('.csv'):
+        df = pd.read_csv(io.BytesIO(contents))
+    else:
+        df = pd.read_excel(io.BytesIO(contents))
+        
+    cleaned_df = auto_clean_dataset(df, target_col)
+    
+    cleaned_filename = f"autocleaned_{file.filename}"
+    cleaned_path = Path(f"temp_{cleaned_filename}")
+    
+    if file.filename.endswith('.csv'):
+        cleaned_df.to_csv(cleaned_path, index=False)
+        media_type = 'text/csv'
+    else:
+        cleaned_df.to_excel(cleaned_path, index=False)
+        media_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    
+    return FileResponse(cleaned_path, media_type=media_type, filename=cleaned_filename)
