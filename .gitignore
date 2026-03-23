@@ -1,0 +1,15 @@
+# Virtual environments
+.finalyearproject/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+temp_*
