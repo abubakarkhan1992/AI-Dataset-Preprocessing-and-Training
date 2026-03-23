@@ -1,0 +1,103 @@
+{
+  "filename": "car_data.csv",
+  "rows": 892,
+  "columns": 6,
+  "missing_metrics": {
+    "missing_count": {
+      "name": 0,
+      "company": 0,
+      "year": 0,
+      "Price": 0,
+      "kms_driven": 52,
+      "fuel_type": 55
+    },
+    "missing_percent": {
+      "name": 0.0,
+      "company": 0.0,
+      "year": 0.0,
+      "Price": 0.0,
+      "kms_driven": 5.83,
+      "fuel_type": 6.17
+    },
+    "missing_percent_mean": 2.0
+  },
+  "duplicate_metrics": {
+    "duplicate_count": 94,
+    "duplicate_percent": 10.54
+  },
+  "outlier_metrics": {
+    "outlier_counts": {},
+    "outlier_ratio": 0
+  },
+  "inconsistencies": [
+    {
+      "column": "name",
+      "issue": "Case inconsistency",
+      "suggestion": "Convert all values to lowercase or standard format"
+    },
+    {
+      "column": "company",
+      "issue": "Case inconsistency",
+      "suggestion": "Convert all values to lowercase or standard format"
+    },
+    {
+      "column": "year",
+      "issue": "Case inconsistency",
+      "suggestion": "Convert all values to lowercase or standard format"
+    },
+    {
+      "column": "year",
+      "issue": "Numeric column contains invalid values",
+      "invalid_values": [
+        "...",
+        "150k",
+        "TOUR",
+        "r 15",
+        "Zest"
+      ],
+      "suggestion": "Remove non-numeric text or replace invalid values"
+    },
+    {
+      "column": "year",
+      "issue": "Stored as object but appears to be datetime",
+      "suggestion": "Convert column to datetime format"
+    },
+    {
+      "column": "Price",
+      "issue": "Numeric column contains invalid values",
+      "invalid_values": [
+        "Ask For Price"
+      ],
+      "suggestion": "Remove non-numeric text or replace invalid values"
+    },
+    {
+      "column": "Price",
+      "issue": "Contains non-numeric price labels",
+      "suggestion": "Replace 'Ask for Price' with NaN or estimated value"
+    },
+    {
+      "column": "kms_driven",
+      "issue": "Contains unit 'kms'",
+      "suggestion": "Remove 'kms' and convert to numeric"
+    }
+  ],
+  "imbalance_metrics": {
+    "fuel_type": {
+      "imbalance_score": 52.6,
+      "counts": {
+        "Petrol": 440,
+        "Diesel": 395,
+        "LPG": 2
+      },
+      "percentages": {
+        "Petrol": 52.6,
+        "Diesel": 47.2,
+        "LPG": 0.2
+      }
+    }
+  },
+  "correlation": {
+    "matrix": {}
+  },
+  "quality_score": 8.93
+}
