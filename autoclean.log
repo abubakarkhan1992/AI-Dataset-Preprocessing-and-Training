@@ -1,0 +1,30 @@
+01-04-2026 10:05:54.23 - INFO - Started validation of input parameters...
+01-04-2026 10:05:54.23 - INFO - Completed validation of input parameters
+01-04-2026 10:05:54.24 - INFO - Started handling of duplicates... Method: "AUTO"
+01-04-2026 10:05:54.24 - DEBUG - 0 missing values found
+01-04-2026 10:05:54.24 - INFO - Completed handling of duplicates in 0.005914 seconds
+01-04-2026 10:05:54.24 - INFO - Started handling of missing values...
+01-04-2026 10:05:54.24 - INFO - Found a total of 6 missing value(s)
+01-04-2026 10:05:54.25 - INFO - Started handling of NUMERICAL missing values... Method: "AUTO"
+01-04-2026 10:05:54.33 - DEBUG - LINREG imputation of 1 value(s) succeeded for feature "Age"
+01-04-2026 10:05:54.38 - DEBUG - LINREG imputation of 3 value(s) succeeded for feature "Salary"
+01-04-2026 10:05:54.39 - INFO - Started handling of CATEGORICAL missing values... Method: "AUTO"
+01-04-2026 10:05:54.45 - DEBUG - KNN imputation of 2 value(s) succeeded for feature "Department"
+01-04-2026 10:05:54.45 - INFO - Completed handling of missing values in 0.207697 seconds
+01-04-2026 10:05:54.45 - INFO - Started handling of outliers... Method: "WINZ"
+01-04-2026 10:05:54.45 - DEBUG - Outlier imputation of 1 value(s) succeeded for feature "Emp_ID"
+01-04-2026 10:05:54.46 - DEBUG - Outlier imputation of 1 value(s) succeeded for feature "Salary"
+01-04-2026 10:05:54.46 - INFO - Completed handling of outliers in 0.011208 seconds
+01-04-2026 10:05:54.46 - INFO - Started conversion of DATETIME features... Granularity: s
+01-04-2026 10:05:54.47 - INFO - Completed conversion of DATETIME features in 0.0041 seconds
+01-04-2026 10:05:54.47 - INFO - Started encoding categorical features... Method: "AUTO"
+01-04-2026 10:05:54.48 - DEBUG - Encoding to ONEHOT succeeded for feature "Department"
+01-04-2026 10:05:54.48 - DEBUG - Encoding to ONEHOT succeeded for feature "Designation"
+01-04-2026 10:05:54.48 - INFO - Completed encoding of categorical features in 0.015814 seconds
+01-04-2026 10:05:54.48 - INFO - Started feature type conversion...
+01-04-2026 10:05:54.49 - DEBUG - Conversion to type INT succeeded for feature "Serial"
+01-04-2026 10:05:54.49 - DEBUG - Conversion to type INT succeeded for feature "Emp_ID"
+01-04-2026 10:05:54.49 - DEBUG - Conversion to type INT succeeded for feature "Age"
+01-04-2026 10:05:54.50 - DEBUG - Conversion to type INT succeeded for feature "Salary"
+01-04-2026 10:05:54.50 - INFO - Completed feature type conversion for 4 feature(s) in 0.011065 seconds
+01-04-2026 10:05:54.50 - INFO - AutoClean process completed in 0.270828 seconds

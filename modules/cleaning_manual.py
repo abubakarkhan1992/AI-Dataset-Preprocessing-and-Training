@@ -57,25 +57,31 @@ def encode_categoricals(df: pd.DataFrame, method: str) -> pd.DataFrame:
                 pass
     return cleaned
 
-def feature_engineering(df: pd.DataFrame, option: str) -> pd.DataFrame:
+def feature_engineering(df: pd.DataFrame, option: str, protected_cols=None) -> pd.DataFrame:
     cleaned = df.copy()
+    protected_cols = set(protected_cols or [])
+
     if option == "Drop ID & Constant Columns":
         cols_to_drop = []
         for col in cleaned.columns:
+            if col in protected_cols:
+                continue
+
             nunique = cleaned[col].nunique(dropna=True)
             col_lower = str(col).lower()
+            is_id_name = ('serial' in col_lower or 
+                          'index' in col_lower or 
+                          col_lower == 'id' or 
+                          col_lower.endswith('_id') or 
+                          col_lower.startswith('id_') or
+                          col_lower.endswith('id'))
             
             if nunique <= 1:
                 cols_to_drop.append(col)
-            elif nunique >= cleaned.shape[0] * 0.8:
-                is_id_name = ('serial' in col_lower or 
-                              'index' in col_lower or 
-                              col_lower == 'id' or 
-                              col_lower.endswith('_id') or 
-                              col_lower.startswith('id_') or
-                              col_lower.endswith('id'))
-                if cleaned[col].dtype == 'object' or is_id_name:
-                    cols_to_drop.append(col)
+            elif is_id_name and nunique >= max(2, cleaned.shape[0] * 0.5):
+                cols_to_drop.append(col)
+            elif nunique >= cleaned.shape[0] * 0.8 and cleaned[col].dtype == 'object':
+                cols_to_drop.append(col)
         cleaned.drop(columns=cols_to_drop, inplace=True, errors='ignore')
     return cleaned
 

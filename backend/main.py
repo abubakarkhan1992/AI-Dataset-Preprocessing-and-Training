@@ -17,6 +17,12 @@ from modules.correlation import correlation_analysis
 from modules.quality_score import compute_quality_score
 from modules.cleaning_manual import manual_clean_dataset
 from modules.cleaning_auto import auto_clean_dataset
+from modules.automl_training import (
+    detect_problem_type,
+    train_automl_model,
+    save_model_pickle,
+    get_model_summary
+)
 
 app = FastAPI(title="Dataset Analyser API")
 
@@ -287,24 +293,231 @@ async def clean_manual(file: UploadFile = File(...), config: str = Form(...)):
 @app.post("/clean/auto")
 async def clean_auto(file: UploadFile = File(...), target_col: str = Form("None")):
     """
-    Apply automated PyCaret cleaning.
+    Apply automated cleaning and prepare the dataset for model training.
     """
     contents = await file.read()
     if file.filename.endswith('.csv'):
         df = pd.read_csv(io.BytesIO(contents))
     else:
         df = pd.read_excel(io.BytesIO(contents))
-        
-    cleaned_df = auto_clean_dataset(df, target_col)
-    
+
+    if target_col == "None" or target_col not in df.columns:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Please select a valid target column for automated cleaning."}
+        )
+
+    try:
+        cleaned_df = auto_clean_dataset(df, target_col)
+    except ValueError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"Automated cleaning failed: {e}"})
+
+    if cleaned_df is None or cleaned_df.empty:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Automated cleaning produced an empty dataset. Please review the uploaded data."}
+        )
+
     cleaned_filename = f"autocleaned_{file.filename}"
     cleaned_path = Path(f"temp_{cleaned_filename}")
-    
+
     if file.filename.endswith('.csv'):
         cleaned_df.to_csv(cleaned_path, index=False)
         media_type = 'text/csv'
     else:
         cleaned_df.to_excel(cleaned_path, index=False)
         media_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    
+
     return FileResponse(cleaned_path, media_type=media_type, filename=cleaned_filename)
+
+# ==================== MODEL TRAINING ENDPOINTS ====================
+
+@app.post("/train")
+async def train_model(file: UploadFile = File(...), target_col: str = Form(...)):
+    """
+    Train an AutoML model using PyCaret.
+    Automatically detects if it's a classification or regression problem.
+    """
+    contents = await file.read()
+    if file.filename.endswith('.csv'):
+        df = pd.read_csv(io.BytesIO(contents))
+    else:
+        df = pd.read_excel(io.BytesIO(contents))
+    
+    # Validate target column
+    if target_col not in df.columns:
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"Target column '{target_col}' not found in dataset"}
+        )
+    
+    # Check for missing values in target column
+    if df[target_col].isna().any():
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Target column contains missing values. Please clean the data first."}
+        )
+    
+    # Additional validations
+    if len(df) < 50:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Dataset too small. Need at least 50 rows for reliable model training."}
+        )
+    
+    if len(df.columns) < 2:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Dataset must have at least 2 columns (features + target)."}
+        )
+    
+    # Check if target column has enough unique values
+    n_unique_target = df[target_col].nunique()
+    if n_unique_target < 2:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Target column must have at least 2 different values."}
+        )
+    
+    try:
+        # Detect problem type
+        problem_type = detect_problem_type(df, target_col)
+        
+        # Train the model
+        results, _ = train_automl_model(
+            df=df,
+            target_column=target_col,
+            problem_type=problem_type,
+            verbose=False
+        )
+        
+        # Get summary for response
+        summary = get_model_summary(results)
+        
+        # Store the trained model and metadata for download
+        model_id = Path(file.filename).stem
+        model_data = {
+            'model': results['best_model'],
+            'problem_type': problem_type,
+            'target_column': target_col,
+            'model_name': results['best_model_name'],
+            'dataset_filename': file.filename
+        }
+        
+        # Store in a simple dict (in production, use a database)
+        if not hasattr(app, 'trained_models'):
+            app.trained_models = {}
+        app.trained_models[model_id] = model_data
+        
+        return {
+            "status": "success",
+            "model_id": model_id,
+            "training_results": summary,
+            "message": f"Model trained successfully! Problem type detected: {problem_type}"
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Model training failed: {str(e)}"}
+        )
+
+@app.get("/train/download/{model_id}")
+async def download_trained_model(model_id: str):
+    """
+    Download the trained model as a pickle file.
+    """
+    if not hasattr(app, 'trained_models') or model_id not in app.trained_models:
+        return JSONResponse(
+            status_code=404,
+            content={"error": "Model not found. Please train a model first."}
+        )
+    
+    try:
+        model_data = app.trained_models[model_id]
+        model = model_data['model']
+        model_name = model_data['model_name']
+        
+        # Save model to pickle format
+        model_filename = f"model_{model_id}_{model_name}.pkl"
+        model_path = Path(f"temp_{model_filename}")
+        
+        if save_model_pickle(model, model_name, str(model_path)):
+            return FileResponse(
+                model_path,
+                media_type='application/octet-stream',
+                filename=model_filename
+            )
+        else:
+            return JSONResponse(
+                status_code=500,
+                content={"error": "Failed to save model"}
+            )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to download model: {str(e)}"}
+        )
+
+@app.post("/train/download/direct")
+async def download_trained_model_direct(file: UploadFile = File(...), target_col: str = Form(...)):
+    """
+    Train a model and download it directly in one request.
+    """
+    contents = await file.read()
+    if file.filename.endswith('.csv'):
+        df = pd.read_csv(io.BytesIO(contents))
+    else:
+        df = pd.read_excel(io.BytesIO(contents))
+    
+    # Validate target column
+    if target_col not in df.columns:
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"Target column '{target_col}' not found in dataset"}
+        )
+    
+    # Check for missing values in target column
+    if df[target_col].isna().any():
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Target column contains missing values. Please clean the data first."}
+        )
+    
+    try:
+        # Detect problem type
+        problem_type = detect_problem_type(df, target_col)
+        
+        # Train the model
+        results, _ = train_automl_model(
+            df=df,
+            target_column=target_col,
+            problem_type=problem_type,
+            verbose=False
+        )
+        
+        model = results['best_model']
+        model_name = results['best_model_name']
+        
+        # Save model to pickle format
+        model_filename = f"model_{Path(file.filename).stem}_{model_name}.pkl"
+        model_path = Path(f"temp_{model_filename}")
+        
+        if save_model_pickle(model, model_name, str(model_path)):
+            return FileResponse(
+                model_path,
+                media_type='application/octet-stream',
+                filename=model_filename
+            )
+        else:
+            return JSONResponse(
+                status_code=500,
+                content={"error": "Failed to save model"}
+            )
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Model training/download failed: {str(e)}"}
+        )
